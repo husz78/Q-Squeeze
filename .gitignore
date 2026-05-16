@@ -1,0 +1,18 @@
+# LaTeX
+*.aux
+*.fdb_latexmk
+*.nav
+*.out
+*.snm
+*.gz
+*.toc
+*.pdfsync
+*.blg
+*.bbl
+*.xdv
+*.fls
+*.log
+
+# Python
+__pycache__/
+*.pyc

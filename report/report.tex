@@ -1,0 +1,82 @@
+\documentclass[11pt,a4paper,twocolumn]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{titlesec}
+\usepackage[numbers]{natbib} 
+
+% Section formatting
+\titleformat{\section}{\normalfont\large\bfseries\uppercase}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{1em}{}
+
+\title{\textbf{Q-Squeeze: A Comparative Study of Unstructured Pruning and Layer Dropping on Qwen 3.5}}
+
+\author{
+  \textbf{Jakub Sudoł} \\ \texttt{sudol.jak@gmail.com} \and
+  \textbf{Hubert Szymański} \\ \texttt{hubertszym4@gmail.com} \and
+  \textbf{Franciszek Wrzosek} \\ \texttt{fw.wrzosek@gmail.com} \\
+  \\
+  \textit{Supervisor: Jakub Krajewski}
+}
+
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+As Large Language Models (LLMs) grow in complexity, the demand for efficient deployment on limited hardware increases. This proposal outlines a research plan to compress the Qwen 3.5-4B model by comparing two distinct one-shot pruning paradigms: unstructured weight pruning via the Wanda algorithm and structured layer dropping via ShortGPT. We aim to establish a performance baseline for these methods on mathematical reasoning (GSM8K) and general knowledge (MMLU) benchmarks. As an ambitious extension, we propose using knowledge distillation to recover lost accuracy, investigating which pruning method provides a more robust foundation for subsequent model recovery.
+\end{abstract}
+
+\section{Introduction \& Context}
+The deployment of Large Language Models (LLMs) is currently restricted by high VRAM requirements. Even efficient models like \textbf{Qwen 3.5-4B} require significant memory for inference, which often exceeds the capacity of mid-range GPUs (11GB--12GB) when accounting for operational overhead. 
+
+This research is important because it explores the efficiency of state-of-the-art small models through two fundamentally different approaches to redundancy. Unstructured pruning (Wanda) targets individual weights throughout the network, while structured pruning (ShortGPT) physically removes entire redundant layers to reduce model depth. Our work focuses on \textbf{Mathematical Reasoning (GSM8K) and Multitask Language Understanding (MMLU)}, investigating whether the model's logical coherence is more sensitive to the loss of specific weights or the removal of entire functional blocks.
+
+\section{Related Work}
+Our study builds on recent advancements in post-training compression. The primary motivation for combining pruning and distillation stems from recent research by \citet{muralidharan2024compact}, which demonstrated that pruning followed by light distillation can effectively downsize LLMs with minimal loss in quality.
+
+For weight-level compression, we employ \textbf{Wanda} \cite{sun2023wanda}, which prunes weights based on their magnitude and their impact on activations. This process utilizes a "calibration set"—a small sample of data used to observe which neurons are most active during inference to determine their importance. For structured compression, we utilize \textbf{ShortGPT} \cite{men2024shortgpt}, which identifies and drops redundant layers based on "Block Influence" metrics. Finally, to address accuracy recovery in our ambitious phase, we look toward distillation methods such as \textbf{MiniLLM} \cite{gu2023minillm}, which allows a smaller "student" model to learn from a larger "teacher" model's output distributions.
+
+\section{Experimental Plan}
+Our plan follows an extensible roadmap, starting with a low-risk core and moving toward more complex recovery experiments if time and results allow.
+
+\subsection{Phase 1: Low-Risk Baseline (Pruning)}
+This phase focuses on "one-shot" methods that do not require extensive retraining.
+\begin{enumerate}
+    \item \textbf{Setup:} We will host the Qwen 3.5-4B model on the \textbf{Entropy Cluster}. We will perform on-cluster inference using the Hugging Face Transformers library to maintain full control over the model weights and architecture.
+    \item \textbf{Baseline Evaluation:} We will evaluate the original model using the \textbf{Language Model Evaluation Harness} (\texttt{lm-eval}). This is an open-source framework used to standardize the evaluation of LLMs across different tasks. We will focus on MMLU and GSM8K.
+    \item \textbf{Pruning Execution:} We will implement Wanda and ShortGPT. For Wanda, we will use a small calibration set to identify unimportant weights. We will generate pruned versions at multiple levels (e.g., removing 20\% and 30\% of parameters).
+    \item \textbf{Analysis:} We will compare the accuracy drop of each method to see which approach better preserves the model's reasoning capabilities.
+\end{enumerate}
+
+\subsection{Phase 2: Ambitious Extension (Distillation)}
+If Phase 1 results are promising and time allows, we will attempt to "heal" the pruned models:
+\begin{itemize}
+    \item \textbf{Knowledge Distillation:} We will select a larger model from the Qwen family to act as a "Teacher." We will then use distillation techniques to train our pruned 4B "Student" model to mimic the Teacher's outputs, attempting to restore the accuracy lost during pruning.
+\end{itemize}
+
+\subsection{Models and Baselines}
+\begin{itemize}[noitemsep]
+    \item \textbf{Primary Model:} Qwen 3.5-4B.
+    \item \textbf{Baselines:} The original Qwen 3.5-4B (to measure the gap) and the native \textbf{Qwen 3.5-2B} model (to see if a pruned 4B model is more efficient than a native smaller model).
+\end{itemize}
+
+\subsection{Deliverables}
+\begin{itemize}[noitemsep]
+    \item \textbf{Metrics:} Accuracy-vs-Sparsity curves for both pruning methods.
+    \item \textbf{Analysis:} A comparison of how unstructured vs. structured pruning affects the model's performance on logical and general knowledge tasks.
+\end{itemize}
+
+\begin{thebibliography}{9}
+\bibitem[Muralidharan et al.(2024)]{muralidharan2024compact} Muralidharan, S., et al. (2024). Compact Language Models via Pruning and Knowledge Distillation. \textit{arXiv:2408.11796}.
+\bibitem[Sun et al.(2023)]{sun2023wanda} Sun, M., et al. (2023). A Simple and Effective Pruning Approach for Large Language Models. \textit{arXiv:2306.11695}.
+\bibitem[Men et al.(2024)]{men2024shortgpt} Men, X., et al. (2024). ShortGPT: Layers in Large Language Models are More Redundant Than You Expect. \textit{arXiv:2403.03853}.
+\bibitem[Gu et al.(2023)]{gu2023minillm} Gu, Y., et al. (2023). MiniLLM: Knowledge Distillation of Large Language Models. \textit{arXiv:2306.08543}.
+\end{thebibliography}
+
+\end{document}
