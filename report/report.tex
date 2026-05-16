@@ -9,7 +9,6 @@
 \usepackage{titlesec}
 \usepackage[numbers]{natbib} 
 
-% Section formatting
 \titleformat{\section}{\normalfont\large\bfseries\uppercase}{\thesection}{1em}{}
 \titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{1em}{}
 
@@ -29,24 +28,24 @@
 \maketitle
 
 \begin{abstract}
-As Large Language Models (LLMs) grow in complexity, the demand for efficient deployment on limited hardware increases. This proposal outlines a research plan to compress the Qwen 3.5-4B model by comparing two distinct one-shot pruning paradigms: unstructured weight pruning via the Wanda algorithm and structured layer dropping via ShortGPT. We aim to establish a performance baseline for these methods on mathematical reasoning (GSM8K) and general knowledge (MMLU) benchmarks. As an ambitious extension, we propose using knowledge distillation to recover lost accuracy, investigating which pruning method provides a more robust foundation for subsequent model recovery.
+As Large Language Models (LLMs) grow in complexity, the demand for efficient deployment on limited hardware increases. This proposal outlines a research plan to compress the Qwen 3.5-4B model by comparing two distinct one-shot pruning paradigms: unstructured weight pruning via the Wanda algorithm and structured layer dropping via ShortGPT. Our primary objective is to evaluate how these compression methods impact the model's performance relative to the original architecture, specifically focusing on the preservation of reasoning capabilities. As a potential extension, we propose using knowledge distillation to investigate accuracy recovery.
 \end{abstract}
 
 \section{Introduction \& Context}
-The deployment of Large Language Models (LLMs) is currently restricted by high VRAM requirements. Even efficient models like \textbf{Qwen 3.5-4B} require significant memory for inference, which often exceeds the capacity of mid-range GPUs (11GB--12GB) when accounting for operational overhead. 
+The deployment of Large Language Models (LLMs) is heavily influenced by VRAM availability. While efficient architectures like \textbf{Qwen 3.5-4B} can typically run on mid-range GPUs, reducing their memory footprint remains highly beneficial. Lowering VRAM usage is always advantageous as it allows for larger batch sizes, longer context windows, and improved accessibility on smaller consumer hardware, such as 8GB GPUs, where memory overhead can otherwise become cumbersome.
 
-This research is important because it explores the efficiency of state-of-the-art small models through two fundamentally different approaches to redundancy. Unstructured pruning (Wanda) targets individual weights throughout the network, while structured pruning (ShortGPT) physically removes entire redundant layers to reduce model depth. Our work focuses on \textbf{Mathematical Reasoning (GSM8K) and Multitask Language Understanding (MMLU)}, investigating whether the model's logical coherence is more sensitive to the loss of specific weights or the removal of entire functional blocks.
+This research is important because it compares two fundamentally different approaches to identifying redundancy in state-of-the-art small models. Unstructured pruning (Wanda) targets individual weights throughout the network, while structured pruning (ShortGPT) physically removes entire redundant layers to reduce model depth. Our goal is to evaluate which method maintains a better "Efficiency Frontier" between model size and performance. Specifically, we focus on \textbf{Mathematical Reasoning (GSM8K) and Multitask Language Understanding (MMLU)} to observe how significantly compression affects logical coherence compared to the original, uncompressed model.
 
 \section{Related Work}
-Our study builds on recent advancements in post-training compression. The primary motivation for combining pruning and distillation stems from recent research by \citet{muralidharan2024compact}, which demonstrated that pruning followed by light distillation can effectively downsize LLMs with minimal loss in quality.
+Our study builds on recent advancements in post-training compression. The primary motivation for exploring pruning followed by potential distillation comes from research by \citet{muralidharan2024compact}, which demonstrated that such pipelines can effectively downsize LLMs while maintaining high quality.
 
-For weight-level compression, we employ \textbf{Wanda} \cite{sun2023wanda}, which prunes weights based on their magnitude and their impact on activations. This process utilizes a "calibration set"—a small sample of data used to observe which neurons are most active during inference to determine their importance. For structured compression, we utilize \textbf{ShortGPT} \cite{men2024shortgpt}, which identifies and drops redundant layers based on "Block Influence" metrics. Finally, to address accuracy recovery in our ambitious phase, we look toward distillation methods such as \textbf{MiniLLM} \cite{gu2023minillm}, which allows a smaller "student" model to learn from a larger "teacher" model's output distributions.
+For weight-level compression, we employ \textbf{Wanda} \cite{sun2023wanda}, which prunes weights based on their magnitude and activations. This process utilizes a "calibration set"—a small sample of data used to observe which neurons are most active during inference. For structured compression, we utilize \textbf{ShortGPT} \cite{men2024shortgpt}, which identifies and drops redundant layers based on "Block Influence" metrics. Finally, as a potential path for accuracy recovery, we consider distillation methods such as \textbf{MiniLLM} \cite{gu2023minillm}, where a smaller "student" model learns from a larger "teacher" model's output distribution.
 
 \section{Experimental Plan}
-Our plan follows an extensible roadmap, starting with a low-risk core and moving toward more complex recovery experiments if time and results allow.
+The project follows an extensible roadmap, starting with a comprehensive pruning baseline and moving toward recovery experiments.
 
-\subsection{Phase 1: Low-Risk Baseline (Pruning)}
-This phase focuses on "one-shot" methods that do not require extensive retraining.
+\subsection{Phase 1: Pruning Baseline}
+This phase focuses on comparing one-shot methods to establish the impact of compression on model performance.
 \begin{enumerate}
     \item \textbf{Setup:} We will host the Qwen 3.5-4B model on the \textbf{Entropy Cluster}. We will perform on-cluster inference using the Hugging Face Transformers library to maintain full control over the model weights and architecture.
     \item \textbf{Baseline Evaluation:} We will evaluate the original model using the \textbf{Language Model Evaluation Harness} (\texttt{lm-eval}). This is an open-source framework used to standardize the evaluation of LLMs across different tasks. We will focus on MMLU and GSM8K.
@@ -54,7 +53,7 @@ This phase focuses on "one-shot" methods that do not require extensive retrainin
     \item \textbf{Analysis:} We will compare the accuracy drop of each method to see which approach better preserves the model's reasoning capabilities.
 \end{enumerate}
 
-\subsection{Phase 2: Ambitious Extension (Distillation)}
+\subsection{Phase 2: Potential Extension - Distillation}
 If Phase 1 results are promising and time allows, we will attempt to "heal" the pruned models:
 \begin{itemize}
     \item \textbf{Knowledge Distillation:} We will select a larger model from the Qwen family to act as a "Teacher." We will then use distillation techniques to train our pruned 4B "Student" model to mimic the Teacher's outputs, attempting to restore the accuracy lost during pruning.
