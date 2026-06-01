@@ -1,0 +1,31 @@
+O co chodzi?
+
+To po prostu metoda zerowania niektórych wag w modelu. Specjalne GPU szybciej
+operują na macierzach rzadkich (takich co mają dużo zer), dlatego jest to
+fajna sprawa. Większość metod zerowania wag wymaga post-treningu albo obliczania
+drugich pochodnych macierzy wag (żeby innymi wagami "zrekompensować" te zera),
+jest to jednak koszmarne obliczeniowo. Wanda (weights and activations pruning)
+przyjmuje uproszczone założenia i tylko zeruje niektóre wagi.
+
+Idea: 
+
+załóżmy prosty przypadek sieci 2-1, y = w1*x1 + w2*x2. Chcemy wyzerować jedno
+wi, żeby wynik zmienił się jak najmniej. Inna metoda, "magnitude pruning" zeruje
+wi o najmniejszym module, jednak jeśli odpowiadające mu xi (input) jest zazwyczaj
+duży, to wi*xi może być duże i mieć duży wpływ na y. Wanda zeruje takie w1, dla którego
+|wi*xi| jest najmniejsze. Robione jest to per-output neuron, czyli jak mamy sieć
+10-20 to dla każdego z 20 wyjściowych neuronów patrzymy na wchodzące do niego wagi,
+wybieramy jakiś procent najmniejszych "składników" |wi*xi| i zerujemy odpowiadające
+im wagi wi. Potrzebujemy jeszcze skądś wziąć xi (inputy), do tego używamy
+tzw. zbioru kalibracyjnego, czyli np. jakiegoś podzbioru danych treningowych, ale
+rozłącznego ze zbiorem testowym (na którym testujemy pruning). przepuszczamy
+zbiór treningowy przez sieć, zbieramy dane o średnich aktywacjach neuronów i mamy
+nasze xi.
+
+Ciekawostki:
+
+Ta metoda działa głównie dla LLMów, słabiej dla innych architektur.
+Jeśli warstwa ma N wejść, M wyjść, to macierz wag ma wymiar MxN i nasza
+Wanda będzie zerować w każdym wierszu jakiś (taki sam) procent liczb, więc
+zgodnie z wykładem z Visual Recognition (tym co Kuba wysyłał) to jest 
+semi-structured pruning.

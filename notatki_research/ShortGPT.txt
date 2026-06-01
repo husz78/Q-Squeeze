@@ -1,0 +1,32 @@
+Streszczenie:
+
+Badają, które bloki można usunąć, czy są istotne, jak wpływa to na wyniki
+
+Wprowadzają metrykę Block Influence (BI):
+
+- wybieramy duży zbiór tokenów, na którym chcemy mierzyć
+- dla każdego tokena: przepuszczamy przez badany blok i mierzymy cosine similarity input i output w tym bloku
+- bierzemy średnią (dokładnie to wartość oczekiwaną) po wszystkich tokenach
+
+"First of all, we construct a calibration set, which is a set of
+unlabelled text samples such as PG19 (Rae et al., 2019). Then we collect the hidden states of
+each layer during inference on these samples. Next, we calculate the BI score based on the
+collected hidden states. Finally, we sort layers in ascending order according to the BI, and
+delete the layers with the lower BI score"
+
+Wnioski:
+Udało się zachować 90% efektywności usuwając 25% parametrów.
+Mało znaczące bloki są głównie od środka do ostatnich bloków, krytyczne są początkowe i ostatni.
+Metryki: BI najlepsze, Relative Magnitude może konkurować z BI (szczególnie w MMLU benchmark, w perplexity nie).
+Działa też dla non-transformers, zamiast bloków usuwają warstwy.
+Metoda jest ortogonalna do metod quantization, czyli można stosować je łącznie ze wzmocnionym rezultatem.
+Zalecają post-train, aby usunięte miejsca wzmocnić i przewrócić jakość (ale to do researchu)
+
+Ciekawe:
+Zaobserwowali, że w pre-norm models* inputy i outputy w blokach są zauważalnie bardziej podobne niż w post-norm
+(jakieś zjawisko matematyczne, appendix A), więc może być więcej mało znaczących bloków. 
+Negatywny efekt usuwania bloków jest zauważalnie wyższy w generative tasks niż multiple-choice tasks.
+
+* Qwen jest pre-norm, 
+post-norm - klasyczne podejście - x_out = l_norm(x_in + layer(x_in))
+pre-norm - nowoczesne podejście - x_out = x_in + layer(l_norm(x_in))
