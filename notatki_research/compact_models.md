@@ -8,7 +8,7 @@ Prezentują pewne best practices, które powinno wg nich stosować.
 
 
 
-\### Metodologia (pruningu):
+### Metodologia (pruningu):
 
 Jako, że metody z gradientem potrzebują dużo pamięci i compute to stosują ranking na podstawie aktywacji.
 
@@ -67,23 +67,23 @@ Na koniec najlepszy kandydat jeszcze jest Fully REtrained na większym zbiorze d
 Pruning Results i insights:
 1. To train a family of LLMs, train the largest one and prune+distill iteratively to smaller LLMs.
 
-2\. Use (batch=L2, seq=mean) importance estimation for width axes and PPL/BI for depth.
+2. Use (batch=L2, seq=mean) importance estimation for width axes and PPL/BI for depth.
 
-3\. Use single-shot importance estimation; iterative provides no benefit.
+3. Use single-shot importance estimation; iterative provides no benefit.
 
-4\. Prefer width pruning over depth for the model scales we consider (≤ 15B).
+4. Prefer width pruning over depth for the model scales we consider (≤ 15B).
 
-5\. Retrain exclusively with distillation loss using KLD instead of conventional training.
+5. Retrain exclusively with distillation loss using KLD instead of conventional training.
 
-6\. Use (logit+intermediate state+embedding) distillation when depth is reduced significantly.
+6. Use (logit+intermediate state+embedding) distillation when depth is reduced significantly.
 
-7\. Use logit-only distillation when depth isn’t reduced significantly.
+7. Use logit-only distillation when depth isn’t reduced significantly.
 
-8\. Prune a model closest to the target size.
+8. Prune a model closest to the target size.
 
-9\. Perform lightweight retraining to stabilize the rankings of searched pruned candidates.
+9. Perform lightweight retraining to stabilize the rankings of searched pruned candidates.
 
-10\. If the largest model is trained using a multi-phase training strategy, it is best to prune and
+10. If the largest model is trained using a multi-phase training strategy, it is best to prune and
 
 retrain the model obtained from the final stage of training
 
