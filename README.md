@@ -11,6 +11,10 @@ Scores are compared per output row, and the lowest `sparsity` fraction in each r
 The current script prunes every `torch.nn.Linear` inside each decoder layer, including Qwen3.5
 linear-attention / Gated DeltaNet projections and MLP projections.
 
+Shared experiment plumbing lives in `utils.py`: model/tokenizer loading, decoder-layer lookup,
+C4 calibration sampling, batching, and Hugging Face saving. Wanda-specific scoring, hooks, masks,
+and pruning stay in `wanda.py`.
+
 ## What to Download
 
 Install Python dependencies:

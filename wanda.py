@@ -1,12 +1,19 @@
 import math
 from collections import defaultdict
-from pathlib import Path
 
 import torch
-from datasets import load_dataset
 from torch import nn
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.masking_utils import create_causal_mask
+
+from utils import (
+    get_decoder_layers,
+    get_input_device,
+    get_text_model,
+    iter_batches,
+    load_c4_calibration,
+    load_model_and_tokenizer,
+    save_model_and_tokenizer,
+)
 
 
 # Edit these constants while experimenting.
@@ -24,75 +31,6 @@ TRUST_REMOTE_CODE = False
 # It prints the model structure and target layers
 # without downloading C4 or changing weights.
 PRINT_ONLY = False
-
-
-def load_model_and_tokenizer():
-    """Load the tokenizer and language model.
-
-    The tokenizer turns raw text into token ids. The model maps token ids to next-token
-    logits. We call model.eval() because Wanda is a post-training pruning method: no
-    dropout, no gradients, no training updates.
-    """
-    print(f"Loading tokenizer: {MODEL_ID}")
-    tokenizer = AutoTokenizer.from_pretrained(
-        MODEL_ID, trust_remote_code=TRUST_REMOTE_CODE
-    )
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    print(f"Loading model: {MODEL_ID}")
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
-        torch_dtype=TORCH_DTYPE,
-        device_map=DEVICE_MAP,
-        trust_remote_code=TRUST_REMOTE_CODE,
-    )
-    model.eval()
-    model.config.use_cache = False
-    return model, tokenizer
-
-
-def get_input_device(model):
-    """Return the device where input_ids should be placed.
-
-    PyTorch tensors and model weights must be on compatible devices. With
-    DEVICE_MAP="auto", Transformers may place the model on GPU if possible, otherwise
-    CPU. This helper asks the model where its first parameter lives.
-    """
-    return next(model.parameters()).device
-
-
-def get_decoder_layers(model):
-    """Find the repeated language-model blocks.
-
-    Qwen causal LMs are decoder-only models. Most of the model's compute and parameters
-    live in a stack of repeated decoder layers: attention/linear-attention plus MLP.
-    Wanda is applied to the large Linear matrices inside these blocks, not to
-    token embeddings or final normalization.
-    """
-    if hasattr(model, "model") and hasattr(model.model, "layers"):
-        return model.model.layers
-    if hasattr(model, "transformer") and hasattr(model.transformer, "h"):
-        return model.transformer.h
-    if hasattr(model, "gpt_neox") and hasattr(model.gpt_neox, "layers"):
-        return model.gpt_neox.layers
-    raise ValueError("Could not find decoder layers for this model.")
-
-
-def get_text_model(model):
-    """Return the inner Qwen text model.
-
-    AutoModelForCausalLM gives us a wrapper with:
-
-        model.model      -> the actual text model
-        model.lm_head    -> final vocabulary projection
-
-    Wanda prunes inside model.model.layers, so this helper lets the optimized code
-    access embeddings, decoder layers, masks, and rotary position embeddings directly.
-    """
-    if hasattr(model, "model"):
-        return model.model
-    raise ValueError("Expected the loaded model to have an inner .model text module.")
 
 
 def find_target_linears(layer):
@@ -139,58 +77,6 @@ def print_model_modules(model):
         print(f"{indent}{display_name}: {module.__class__.__name__}{marker}{weight}")
 
 
-def load_c4_calibration(tokenizer):
-    """Sample 128 C4 sequences like the Wanda/SparseGPT calibration setup.
-
-    We use the first C4 training shard and sample fixed-length token spans from random
-    documents. No labels are needed; Wanda only needs inputs to estimate activation
-    magnitudes.
-    """
-    print(
-        "Loading C4 calibration data from allenai/c4 first train shard "
-        f"(samples={N_CALIBRATION_SAMPLES}, sequence_length={SEQUENCE_LENGTH})..."
-    )
-    dataset = load_dataset(
-        "allenai/c4",
-        data_files={"train": "en/c4-train.00000-of-01024.json.gz"},
-        split="train",
-    )
-
-    generator = torch.Generator()
-    generator.manual_seed(RANDOM_SEED)
-
-    samples = []
-    attempts = 0
-    max_attempts = N_CALIBRATION_SAMPLES * 100
-    while len(samples) < N_CALIBRATION_SAMPLES and attempts < max_attempts:
-        attempts += 1
-        # Pick a random C4 document, then pick a random contiguous token span from it.
-        row_idx = torch.randint(0, len(dataset), (1,), generator=generator).item()
-        text = dataset[row_idx]["text"]
-        input_ids = tokenizer(
-            text, return_tensors="pt", add_special_tokens=False
-        ).input_ids
-
-        # The document should be long enough to fit a full SEQUENCE_LENGTH span.
-        if input_ids.shape[1] < SEQUENCE_LENGTH:
-            continue
-
-        max_start = input_ids.shape[1] - SEQUENCE_LENGTH
-        start = torch.randint(0, max_start + 1, (1,), generator=generator).item()
-        samples.append(input_ids[:, start : start + SEQUENCE_LENGTH])
-        print(f"  collected calibration sample {len(samples)}/{N_CALIBRATION_SAMPLES}")
-
-    if len(samples) != N_CALIBRATION_SAMPLES:
-        raise RuntimeError(
-            f"Collected {len(samples)} samples, expected {N_CALIBRATION_SAMPLES}."
-        )
-
-    print(
-        f"Collected {len(samples)} calibration sequences of length {SEQUENCE_LENGTH}."
-    )
-    return samples
-
-
 def make_position_ids(batch_size, sequence_length, device):
     """Create Qwen3.5 position ids in the same shape used by its forward method.
 
@@ -200,12 +86,6 @@ def make_position_ids(batch_size, sequence_length, device):
     """
     position_ids = torch.arange(sequence_length, device=device)
     return position_ids.view(1, 1, -1).expand(4, batch_size, -1)
-
-
-def iter_batches(samples):
-    """Join calibration sequences into small batches."""
-    for start in range(0, len(samples), BATCH_SIZE):
-        yield torch.cat(samples[start : start + BATCH_SIZE], dim=0)
 
 
 class ActivationStats:
@@ -249,17 +129,32 @@ def prepare_manual_forward_states(model, samples):
 
     We do the first part once here. After that, apply_wanda() can run one decoder
     layer at a time, prune it, then pass updated hidden states to the next layer.
+
+    Important naming:
+        states = list of calibration batches.
+        state  = runtime data for one calibration batch.
+
+    If N_CALIBRATION_SAMPLES=4 and BATCH_SIZE=1, then states has 4 items.
+    If N_CALIBRATION_SAMPLES=4 and BATCH_SIZE=4, then states has 1 item.
     """
     text_model = get_text_model(model)
     device = get_input_device(model)
     states = []
 
     with torch.no_grad():
-        for input_ids in iter_batches(samples):
+        for input_ids in iter_batches(samples, BATCH_SIZE):
+            # This loop creates one state per calibration batch.
+            # input_ids has shape [batch, sequence_length].
             input_ids = input_ids.to(device)
+
+            # Our calibration spans have no padding, so every token is valid.
             attention_mask = torch.ones_like(input_ids, device=device)
+
+            # Convert token IDs to vectors. This is the first hidden_states value
+            # that will flow through layer 0, then layer 1, and so on.
             hidden_states = text_model.embed_tokens(input_ids)
 
+            # Qwen3.5 needs position metadata in addition to token vectors.
             position_ids = make_position_ids(
                 batch_size=hidden_states.shape[0],
                 sequence_length=hidden_states.shape[1],
@@ -282,6 +177,9 @@ def prepare_manual_forward_states(model, samples):
                 hidden_states, rotary_position_ids
             )
 
+            # This dictionary is one batch's "travel pack" through the decoder stack.
+            # Only hidden_states changes after each pruned layer. Masks and positions
+            # stay fixed because token order and padding do not change.
             states.append(
                 {
                     "hidden_states": hidden_states,
@@ -341,6 +239,10 @@ def collect_layer_activation_stats(model, layer_idx, layer, target_linears, stat
     try:
         with torch.no_grad():
             for state in states:
+                # Run the current layer once for each calibration batch.
+                # Forward hooks attached above collect Linear inputs into stats.
+                # We ignore the output here because this pass is only for measuring
+                # activations before pruning the current layer.
                 run_one_decoder_layer(model, layer_idx, layer, state)
     finally:
         for handle in handles:
@@ -358,6 +260,8 @@ def update_states_after_pruning(model, layer_idx, layer, states):
     """
     with torch.no_grad():
         for state in states:
+            # Now we DO keep the output. This output was produced by the pruned
+            # current layer, so it becomes the input hidden_states for the next layer.
             state["hidden_states"] = run_one_decoder_layer(
                 model, layer_idx, layer, state
             )
@@ -424,6 +328,8 @@ def apply_wanda(model, samples):
     So it is not one call to model.forward(); it is one manual pass through the decoder
     stack, with a second local run of each layer after pruning to propagate changes.
     """
+    # Build one state per calibration batch. Each state starts at the embedding output,
+    # before decoder layer 0 has run.
     states = prepare_manual_forward_states(model, samples)
     total_pruned = 0
     for layer_idx, layer in enumerate(get_decoder_layers(model)):
@@ -446,29 +352,32 @@ def apply_wanda(model, samples):
             total_pruned += pruned
             print(f"  pruned {pruned:,} weights in {name}")
 
+        # Push every calibration batch through the newly pruned layer so the next
+        # decoder layer receives updated activations (as in original paper).
         update_states_after_pruning(model, layer_idx, layer, states)
 
     return total_pruned
 
 
-def save_model(model, tokenizer):
-    """Save the zeroed-weight model in normal Hugging Face format."""
-    path = Path(OUTPUT_DIR)
-    path.mkdir(parents=True, exist_ok=True)
-    print(f"\nSaving pruned model to {path}")
-    model.save_pretrained(path, safe_serialization=True)
-    tokenizer.save_pretrained(path)
-
-
 def main():
-    model, tokenizer = load_model_and_tokenizer()
+    model, tokenizer = load_model_and_tokenizer(
+        MODEL_ID,
+        torch_dtype=TORCH_DTYPE,
+        device_map=DEVICE_MAP,
+        trust_remote_code=TRUST_REMOTE_CODE,
+    )
     print_model_modules(model)
 
     if PRINT_ONLY:
         print("PRINT_ONLY=True, so we stop after printing modules.")
         return
 
-    samples = load_c4_calibration(tokenizer)
+    samples = load_c4_calibration(
+        tokenizer,
+        n_samples=N_CALIBRATION_SAMPLES,
+        sequence_length=SEQUENCE_LENGTH,
+        seed=RANDOM_SEED,
+    )
     before = count_target_sparsity(model)
     print(f"\nTarget sparsity before: {before[0]:,}/{before[1]:,} = {before[2]:.2%}")
 
@@ -479,7 +388,7 @@ def main():
     print(f"Newly pruned weights: {total_pruned:,}")
     print(f"Target sparsity after: {after[0]:,}/{after[1]:,} = {after[2]:.2%}")
 
-    save_model(model, tokenizer)
+    save_model_and_tokenizer(model, tokenizer, OUTPUT_DIR)
 
 
 if __name__ == "__main__":
