@@ -9,7 +9,7 @@ from utils import (
     load_c4_calibration
 )
 
-MODEL_ID = "Qwen/Qwen3.5-0.8B"
+MODEL_ID = "Qwen/Qwen3.5-4B"
 # OUTPUT_DIR = "models/qwen-wanda-smoke"
 N_CALIBRATION_SAMPLES = 128  # increase on entropy/colab to 128.
 SEQUENCE_LENGTH = 2048  # increase to 2048 (as in original Wanda paper).
