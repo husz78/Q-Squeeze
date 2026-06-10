@@ -1,4 +1,5 @@
 import torch
+import time 
 
 from torch import nn
 import torch.nn.functional as F
@@ -152,13 +153,18 @@ def main():
         seed=RANDOM_SEED,
     )
 
+    start = time.perf_counter()
+
     BI_results = calculate_all_blocks_BI(
         model=model,
         samples=samples,
         chunk_size=CHUNK_SIZE
     )
 
+    end = time.perf_counter()
+
     print(BI_results)
+    print(f"Czas wykonania: {end - start:.2f} sekund")
 
     save_results(BI_results)
 
