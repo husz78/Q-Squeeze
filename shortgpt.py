@@ -127,6 +127,11 @@ def evaluate_block(block, hidden_states: torch.Tensor, position_embeddings: tupl
     # Concatenate the results of the small chunks back into one large tensor
     return torch.cat(output_chunks, dim=0)
 
+def save_results(results: list[float]):
+    with open("BI_results.txt", "w", encoding="utf-8") as plik:
+        for wynik in results:
+            plik.write(f"{wynik:.6f}\n")
+
 def main():
     model, tokenizer = load_model_and_tokenizer(
         MODEL_ID,
@@ -155,7 +160,8 @@ def main():
 
     print(BI_results)
 
-
+    save_results(BI_results)
+    
     # save_model_and_tokenizer(model, tokenizer, OUTPUT_DIR)
 
 
