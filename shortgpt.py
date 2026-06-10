@@ -5,8 +5,7 @@ import torch.nn.functional as F
 
 from utils import (
     load_model_and_tokenizer,
-    load_c4_calibration,
-    print_model_modules
+    load_c4_calibration
 )
 
 MODEL_ID = "Qwen/Qwen3.5-0.8B"
@@ -139,7 +138,6 @@ def main():
         device_map=DEVICE_MAP,
         trust_remote_code=TRUST_REMOTE_CODE,
     )
-    print_model_modules(model)
 
     if PRINT_ONLY:
         print("PRINT_ONLY=True, so we stop after printing modules.")
@@ -161,7 +159,7 @@ def main():
     print(BI_results)
 
     save_results(BI_results)
-    
+
     # save_model_and_tokenizer(model, tokenizer, OUTPUT_DIR)
 
 
