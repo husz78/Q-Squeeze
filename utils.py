@@ -26,6 +26,9 @@ def load_model_and_tokenizer(
         device_map=device_map,
         trust_remote_code=trust_remote_code,
     )
+
+    print(f"Model jest na urządzeniu: {next(model.parameters()).device}")
+
     model.eval()
     model.config.use_cache = False
     return model, tokenizer
