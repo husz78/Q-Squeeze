@@ -12,7 +12,7 @@ from utils import (
 MODEL_ID = "Qwen/Qwen3.5-4B"
 # OUTPUT_DIR = "models/qwen-wanda-smoke"
 N_CALIBRATION_SAMPLES = 128  # increase on entropy/colab to 128.
-SEQUENCE_LENGTH = 2048  # increase to 2048 (as in original Wanda paper).
+SEQUENCE_LENGTH = 1024  # increase to 2048 (as in original Wanda paper).
 RANDOM_SEED = 0
 BATCH_SIZE = 1
 CHUNK_SIZE = 1
@@ -114,7 +114,7 @@ def evaluate_block(block, hidden_states: torch.Tensor, position_embeddings: tupl
         out_chunk = block(input_chunk, position_embeddings=position_embeddings)
         
         final_output[start_idx:end_idx] = out_chunk
-        
+
     return final_output
 
 
