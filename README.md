@@ -1,19 +1,20 @@
-# Q-Squeeze Wanda
+# Q-Squeeze
 
-This repo contains a first Wanda implementation for Qwen/Qwen3.5-style causal language models.
-Wanda prunes each linear layer with the score from the paper:
+This repository contains pruning implementations for Qwen/Qwen3.5-style causal language models, supporting both unstructured and structured pruning techniques:
 
-```text
-S_ij = |W_ij| * ||X_j||_2
-```
+1. **Wanda (Unstructured Pruning)**: Prunes individual weights in linear layers based on weight magnitudes and input activation norms:
+   $$S_{ij} = |W_{ij}| \times \|X_j\|_2$$
+   It zeros out the lowest scoring weights under a target sparsity constraint without changing the physical shape of the tensors.
+2. **Structured Width Pruning**: Physically prunes entire attention heads (under GQA constraints) and MLP intermediate dimensions to reduce parameters, save VRAM, and speed up inference.
 
-Scores are compared per output row, and the lowest `sparsity` fraction in each row is set to zero.
-The current script prunes every `torch.nn.Linear` inside each decoder layer, including Qwen3.5
-linear-attention / Gated DeltaNet projections and MLP projections.
+---
 
-Shared experiment plumbing lives in `utils.py`: model/tokenizer loading, decoder-layer lookup,
-C4 calibration sampling, batching, and Hugging Face saving. Wanda-specific scoring, hooks, masks,
-and pruning stay in `wanda.py`.
+## Repository Structure
+
+- `wanda.py`: Wanda-specific scoring, hooks, masks, and unstructured pruning logic.
+- `width_pruning/layer_pruning.py`: Structured width pruning logic, including activation collection, GQA alignment, and physical weight slicing.
+- `utils.py`: Shared utilities for model/tokenizer loading, C4 calibration data sampling, batching, and model saving.
+
 
 ## What to Download
 
@@ -115,3 +116,22 @@ lm_eval --model hf \
   --device cuda:0 \
   --batch_size auto
 ```
+
+## Structured Width Pruning
+
+In addition to Wanda, this repository supports structured width pruning of Multi-Head Attention query/key/value heads and MLP intermediate dimensions in `width_pruning/layer_pruning.py`.
+
+Unlike unstructured pruning, structured width pruning physically slices the weight matrices, resulting in smaller files, reduced VRAM footprint, and faster inference on any standard CPU or GPU.
+
+### How it works:
+1. **Activation-based Scoring**: Forward hooks record the L2 activation norms of query heads (inputs of `o_proj`) and MLP neurons (inputs of `down_proj`) over a C4 calibration dataset.
+2. **GQA Alignment**: Automatically resolves the target number of query/KV heads under GQA divisibility constraints and ranks/selects the most active heads.
+3. **Physical Slicing**: Replaces the layer modules with physically smaller `nn.Linear` layers and updates the global Hugging Face configuration.
+
+### How to Run:
+Configure `ATTN_HEAD_PRUNE_RATIO` (e.g. `0.25`) and `MLP_PRUNE_RATIO` (e.g. `0.20`) at the top of `width_pruning/layer_pruning.py`, then run:
+```bash
+python width_pruning/layer_pruning.py
+```
+The pruned model will be saved in `models/qwen-width-pruned` and can be loaded out-of-the-box using `AutoModelForCausalLM.from_pretrained()`.
+
