@@ -10,11 +10,9 @@ from utils import (
 )
 
 MODEL_ID = "Qwen/Qwen3.5-4B"
-# OUTPUT_DIR = "models/qwen-wanda-smoke"
 N_CALIBRATION_SAMPLES = 128  # increase on entropy/colab to 128.
-SEQUENCE_LENGTH = 1024  # increase to 2048 (as in original Wanda paper).
+SEQUENCE_LENGTH = 1028  # increase to 2048 (as in original Wanda paper).
 RANDOM_SEED = 0
-BATCH_SIZE = 1
 CHUNK_SIZE = 1
 TORCH_DTYPE = "auto"
 DEVICE_MAP = "auto"
@@ -44,9 +42,7 @@ def calculate_all_blocks_BI(model, samples: list[torch.Tensor], chunk_size: int 
 
         seq_length = tokens_batch.size(1)
         position_ids = torch.arange(0, seq_length, dtype=torch.long, device=device).unsqueeze(0)
-
-        # Extract cosines and sines for RoPE from Qwen's dedicated module
-        # (1, 2048, 128) - seq_lenght = 2048, head_dim = 128
+        
         position_embeddings = model.model.rotary_emb(prev_hidden_states, position_ids)
 
     results = []
@@ -102,7 +98,6 @@ def get_blocks(model) -> nn.ModuleList:
 
 def evaluate_block(block, hidden_states: torch.Tensor, position_embeddings: tuple, chunk_size) -> torch.Tensor:
     total_size = hidden_states.size(0)
-    
     # Empty tensor for memory optimization
     final_output = torch.empty_like(hidden_states)
     with torch.no_grad():
