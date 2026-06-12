@@ -105,16 +105,16 @@ def evaluate_block(block, hidden_states: torch.Tensor, position_embeddings: tupl
     
     # Empty tensor for memory optimization
     final_output = torch.empty_like(hidden_states)
-    
-    for start_idx in range(0, total_size, chunk_size):
-        print_vram_usage(f"Chunk start: {start_idx}")
-        end_idx = min(start_idx + chunk_size, total_size)
-        
-        input_chunk = hidden_states[start_idx:end_idx]
-        
-        out_chunk = block(input_chunk, position_embeddings=position_embeddings)
-        
-        final_output[start_idx:end_idx] = out_chunk
+    with torch.no_grad():
+        for start_idx in range(0, total_size, chunk_size):
+            print_vram_usage(f"Chunk start: {start_idx}")
+            end_idx = min(start_idx + chunk_size, total_size)
+            
+            input_chunk = hidden_states[start_idx:end_idx]
+            
+            out_chunk = block(input_chunk, position_embeddings=position_embeddings)
+            
+            final_output[start_idx:end_idx] = out_chunk
 
     return final_output
 
