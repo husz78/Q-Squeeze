@@ -125,8 +125,6 @@ def main():
         trust_remote_code=TRUST_REMOTE_CODE,
     )
 
-    print(f"Model jest na urządzeniu: {next(model.parameters()).device}")
-
     if PRINT_ONLY:
         print("PRINT_ONLY=True, so we stop after printing modules.")
         return
