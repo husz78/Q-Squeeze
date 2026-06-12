@@ -74,12 +74,9 @@ def calculate_BI(input_states: torch.Tensor, output_states: torch.Tensor) -> flo
     Returns:
         float: The calculated Block Influence (BI) score.
     """
-    print_vram_usage("Zaczynamy calculate BI")
     with torch.no_grad():
         input_flat = input_states.view(-1, input_states.size(-1))
-        print_vram_usage("Po input flat (calculate BI)")
         output_flat = output_states.view(-1, output_states.size(-1))
-        print_vram_usage("Po output flat (calculate BI)")
 
         cos_sim = F.cosine_similarity(input_flat, output_flat, dim=-1)
 
@@ -110,7 +107,6 @@ def evaluate_block(block, hidden_states: torch.Tensor, position_embeddings: tupl
     final_output = torch.empty_like(hidden_states)
     with torch.no_grad():
         for start_idx in range(0, total_size, chunk_size):
-            print_vram_usage(f"Chunk start: {start_idx}")
             end_idx = min(start_idx + chunk_size, total_size)
             
             input_chunk = hidden_states[start_idx:end_idx]
@@ -179,6 +175,8 @@ def main():
     print(f"Czas wykonania: {end - start:.2f} sekund")
 
     save_results(BI_results)
+
+    print_vram_usage("Koniec")
 
     # save_model_and_tokenizer(model, tokenizer, OUTPUT_DIR)
 
