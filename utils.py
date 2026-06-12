@@ -120,3 +120,15 @@ def save_model_and_tokenizer(model, tokenizer, output_dir):
     print(f"\nSaving model to {path}")
     model.save_pretrained(path, safe_serialization=True)
     tokenizer.save_pretrained(path)
+
+def print_vram_usage(step_name=""):
+    """Get memory in bytes and convert to Gigabytes (GiB)."""
+    allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+    reserved = torch.cuda.memory_reserved() / (1024 ** 3)
+    max_allocated = torch.cuda.max_memory_allocated() / (1024 ** 3)
+    
+    print(f"\n--- [VRAM Status: {step_name}] ---")
+    print(f"  Currently allocated by tensors: {allocated:.2f} GiB")
+    print(f"  Reserved by PyTorch (cache):     {reserved:.2f} GiB")
+    print(f"  Historical peak (Max Peak):      {max_allocated:.2f} GiB")
+    print("-" * 30 + "\n")
