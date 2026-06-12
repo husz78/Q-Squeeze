@@ -76,9 +76,9 @@ def calculate_BI(input_states: torch.Tensor, output_states: torch.Tensor) -> flo
     """
     print_vram_usage("Zaczynamy calculate BI")
     with torch.no_grad():
-        input_flat = input_states.view(-1, input_states.size(-1)).to(torch.float16)
+        input_flat = input_states.view(-1, input_states.size(-1))
         print_vram_usage("Po input flat (calculate BI)")
-        output_flat = output_states.view(-1, output_states.size(-1)).to(torch.float16)
+        output_flat = output_states.view(-1, output_states.size(-1))
         print_vram_usage("Po output flat (calculate BI)")
 
         cos_sim = F.cosine_similarity(input_flat, output_flat, dim=-1)
