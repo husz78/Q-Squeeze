@@ -101,31 +101,22 @@ def get_blocks(model) -> nn.ModuleList:
     raise ValueError("Decoder layers not found.")
 
 def evaluate_block(block, hidden_states: torch.Tensor, position_embeddings: tuple, chunk_size) -> torch.Tensor:
-    """Passes hidden states through a single Qwen block in smaller chunks
-    to avoid CUDA Out of Memory errors.
+    total_size = hidden_states.size(0)
+    
+    # Empty tensor for memory optimization
+    final_output = torch.empty_like(hidden_states)
+    
+    for start_idx in range(0, total_size, chunk_size):
+        end_idx = min(start_idx + chunk_size, total_size)
+        
+        input_chunk = hidden_states[start_idx:end_idx]
+        
+        out_chunk = block(input_chunk, position_embeddings=position_embeddings)
+        
+        final_output[start_idx:end_idx] = out_chunk
+        
+    return final_output
 
-    Args:
-        block: The Qwen decoder layer to evaluate.
-        hidden_states (torch.Tensor): The input hidden states to the block.
-        position_embeddings (tuple): The positional embeddings required by the Qwen block.
-        chunk_size (int): The size of chunks to process to avoid CUDA Out of Memory errors.
-
-    Returns:
-        torch.Tensor: The output hidden states from the block.
-    """
-    total_samples = hidden_states.size(0)
-    output_chunks = []
-
-    # Split the large batch into chunks
-    for i in range(0, total_samples, chunk_size):
-        chunk_hidden = hidden_states[i : i + chunk_size]
-
-        with torch.no_grad():
-            outputs = block(chunk_hidden, position_embeddings=position_embeddings)
-            output_chunks.append(outputs)
-
-    # Concatenate the results of the small chunks back into one large tensor
-    return torch.cat(output_chunks, dim=0)
 
 def save_results(results: list[float]):
     with open("BI_results.txt", "w", encoding="utf-8") as plik:
