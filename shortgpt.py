@@ -107,6 +107,7 @@ def evaluate_block(block, hidden_states: torch.Tensor, position_embeddings: tupl
     final_output = torch.empty_like(hidden_states)
     
     for start_idx in range(0, total_size, chunk_size):
+        print_vram_usage(f"Chunk start: {start_idx}")
         end_idx = min(start_idx + chunk_size, total_size)
         
         input_chunk = hidden_states[start_idx:end_idx]
@@ -123,13 +124,28 @@ def save_results(results: list[float]):
         for wynik in results:
             plik.write(f"{wynik:.6f}\n")
 
+
+def print_vram_usage(step_name=""):
+    # Pobieramy pamięć w bajtach i przeliczamy na Gigabajty (GiB)
+    allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+    reserved = torch.cuda.memory_reserved() / (1024 ** 3)
+    max_allocated = torch.cuda.max_memory_allocated() / (1024 ** 3)
+    
+    print(f"\n--- [VRAM Status: {step_name}] ---")
+    print(f"  Aktualnie alokowane przez tensory: {allocated:.2f} GiB")
+    print(f"  Zarezerwowane przez PyTorch (cache): {reserved:.2f} GiB")
+    print(f"  Historyczny szczyt (Max Peak):       {max_allocated:.2f} GiB")
+    print("-" * 30 + "\n")
+
 def main():
+    print_vram_usage("Start skryptu")
     model, tokenizer = load_model_and_tokenizer(
         MODEL_ID,
         torch_dtype=TORCH_DTYPE,
         device_map=DEVICE_MAP,
         trust_remote_code=TRUST_REMOTE_CODE,
     )
+    print_vram_usage("Po załadowaniu modelu")
 
     print(f"Model jest na urządzeniu: {next(model.parameters()).device}")
 
@@ -143,6 +159,8 @@ def main():
         sequence_length=SEQUENCE_LENGTH,
         seed=RANDOM_SEED,
     )
+
+    print_vram_usage("Po załadowaniu danych C4")
 
     start = time.perf_counter()
 
