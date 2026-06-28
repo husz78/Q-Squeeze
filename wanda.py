@@ -10,18 +10,22 @@ from utils import (
     get_input_device,
     get_text_model,
     iter_batches,
-    load_c4_calibration,
+    load_hybrid_calibration,
     load_model_and_tokenizer,
+    print_vram_usage,
     save_model_and_tokenizer,
 )
 
 
 # Edit these constants while experimenting.
-MODEL_ID = "Qwen/Qwen3.5-0.8B"
-OUTPUT_DIR = "models/qwen-wanda-smoke"
+# MODEL_ID = "Qwen/Qwen3.5-0.8B"
+MODEL_ID = "Qwen/Qwen3.5-4B"
+OUTPUT_DIR = "models/qwen3.5-4b-wanda-20"
 SPARSITY = 0.20
-N_CALIBRATION_SAMPLES = 4  # increase on entropy/colab to 128.
-SEQUENCE_LENGTH = 64  # increase to 2048 (as in original Wanda paper).
+# N_CALIBRATION_SAMPLES = 4  # increase on entropy/colab to 128.
+# SEQUENCE_LENGTH = 64  # increase to 2048 (as in original Wanda paper).
+N_CALIBRATION_SAMPLES = 128
+SEQUENCE_LENGTH = 2048
 RANDOM_SEED = 0
 BATCH_SIZE = 1
 TORCH_DTYPE = "auto"
@@ -355,6 +359,8 @@ def apply_wanda(model, samples):
         # Push every calibration batch through the newly pruned layer so the next
         # decoder layer receives updated activations (as in original paper).
         update_states_after_pruning(model, layer_idx, layer, states)
+        if layer_idx % 4 == 0:
+            print_vram_usage(f"after layer {layer_idx:02d}")
 
     return total_pruned
 
@@ -366,18 +372,20 @@ def main():
         device_map=DEVICE_MAP,
         trust_remote_code=TRUST_REMOTE_CODE,
     )
+    print_vram_usage("after model load")
     print_model_modules(model)
 
     if PRINT_ONLY:
         print("PRINT_ONLY=True, so we stop after printing modules.")
         return
 
-    samples = load_c4_calibration(
+    samples = load_hybrid_calibration(
         tokenizer,
         n_samples=N_CALIBRATION_SAMPLES,
         sequence_length=SEQUENCE_LENGTH,
         seed=RANDOM_SEED,
     )
+    print_vram_usage("after calibration load")
     before = count_target_sparsity(model)
     print(f"\nTarget sparsity before: {before[0]:,}/{before[1]:,} = {before[2]:.2%}")
 
@@ -388,7 +396,9 @@ def main():
     print(f"Newly pruned weights: {total_pruned:,}")
     print(f"Target sparsity after: {after[0]:,}/{after[1]:,} = {after[2]:.2%}")
 
+    print_vram_usage("before saving")
     save_model_and_tokenizer(model, tokenizer, OUTPUT_DIR)
+    print_vram_usage("after saving")
 
 
 if __name__ == "__main__":

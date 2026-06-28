@@ -101,7 +101,9 @@ def load_c4_calibration(
     if len(samples) != n_samples:
         raise RuntimeError(f"Collected {len(samples)} samples, expected {n_samples}.")
 
-    print(f"Collected {len(samples)} calibration sequences of length {sequence_length}.")
+    print(
+        f"Collected {len(samples)} calibration sequences of length {sequence_length}."
+    )
     return samples
 
 
@@ -120,7 +122,7 @@ def load_hybrid_calibration(
         f"Loading 50-50 Hybrid (C4 + GSM8K) calibration data "
         f"(samples={n_samples}, sequence_length={sequence_length})..."
     )
-    
+
     n_c4 = n_samples // 2
     n_gsm = n_samples - n_c4
 
@@ -157,7 +159,7 @@ def load_hybrid_calibration(
         raise RuntimeError(f"Collected {len(c4_samples)} C4 samples, expected {n_c4}.")
 
     # 2. Load GSM8K dataset
-    gsm_dataset = load_dataset("gsm8k", "main", split="train")
+    gsm_dataset = load_dataset("openai/gsm8k", "main", split="train")
 
     gsm_samples = []
     attempts = 0
@@ -166,30 +168,40 @@ def load_hybrid_calibration(
         attempts += 1
         current_text = ""
         while True:
-            row_idx = torch.randint(0, len(gsm_dataset), (1,), generator=generator).item()
+            row_idx = torch.randint(
+                0, len(gsm_dataset), (1,), generator=generator
+            ).item()
             row = gsm_dataset[row_idx]
             current_text += f"Question: {row['question']}\nAnswer: {row['answer']}\n\n"
-            
+
             input_ids = tokenizer(
                 current_text, return_tensors="pt", add_special_tokens=False
             ).input_ids
-            
+
             if input_ids.shape[1] >= sequence_length:
                 max_start = input_ids.shape[1] - sequence_length
-                start = torch.randint(0, max_start + 1, (1,), generator=generator).item()
+                start = torch.randint(
+                    0, max_start + 1, (1,), generator=generator
+                ).item()
                 gsm_samples.append(input_ids[:, start : start + sequence_length])
-                print(f"  collected GSM8K calibration sample {len(gsm_samples)}/{n_gsm}")
+                print(
+                    f"  collected GSM8K calibration sample {len(gsm_samples)}/{n_gsm}"
+                )
                 break
 
     if len(gsm_samples) != n_gsm:
-        raise RuntimeError(f"Collected {len(gsm_samples)} GSM8K samples, expected {n_gsm}.")
+        raise RuntimeError(
+            f"Collected {len(gsm_samples)} GSM8K samples, expected {n_gsm}."
+        )
 
     # Combine and shuffle
     all_samples = c4_samples + gsm_samples
     indices = torch.randperm(len(all_samples), generator=generator).tolist()
     shuffled_samples = [all_samples[i] for i in indices]
 
-    print(f"Collected {len(shuffled_samples)} hybrid calibration sequences of length {sequence_length}.")
+    print(
+        f"Collected {len(shuffled_samples)} hybrid calibration sequences of length {sequence_length}."
+    )
     return shuffled_samples
 
 
@@ -204,15 +216,16 @@ def save_model_and_tokenizer(model, tokenizer, output_dir):
     path = Path(output_dir)
     path.mkdir(parents=True, exist_ok=True)
     print(f"\nSaving model to {path}")
-    model.save_pretrained(path, safe_serialization=True)
+    model.save_pretrained(path, safe_serialization=True, max_shard_size="2GB")
     tokenizer.save_pretrained(path)
+
 
 def print_vram_usage(step_name=""):
     """Get memory in bytes and convert to Gigabytes (GiB)."""
-    allocated = torch.cuda.memory_allocated() / (1024 ** 3)
-    reserved = torch.cuda.memory_reserved() / (1024 ** 3)
-    max_allocated = torch.cuda.max_memory_allocated() / (1024 ** 3)
-    
+    allocated = torch.cuda.memory_allocated() / (1024**3)
+    reserved = torch.cuda.memory_reserved() / (1024**3)
+    max_allocated = torch.cuda.max_memory_allocated() / (1024**3)
+
     print(f"\n--- [VRAM Status: {step_name}] ---")
     print(f"  Currently allocated by tensors: {allocated:.2f} GiB")
     print(f"  Reserved by PyTorch (cache):     {reserved:.2f} GiB")
