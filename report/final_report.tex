@@ -83,7 +83,7 @@ The evaluation results on MMLU and GSM8K are summarized in Table~\ref{tab:result
 \label{tab:results}
 \begin{tabular}{lcccccc}
 \toprule
-\textbf{Model / Pruning} & \textbf{Sparsity} & \textbf{MMLU Acc.} & \textbf{MMLU Std.} & \textbf{GSM8K Acc.} & \textbf{GSM8K Std.} \\
+\textbf{Model / Pruning} & \textbf{Sparsity} & \textbf{MMLU Acc.} & \textbf{MMLU SE} & \textbf{GSM8K Acc.} & \textbf{GSM8K SE} \\
 \midrule
 Qwen 3.5-4B (Dense) & 0\% & 0.7439 & 0.0035 & 0.7521 & 0.0119 \\
 Qwen 3.5-2B (Dense) & 0\% & 0.5924 & 0.0039 & 0.5754 & 0.0136 \\
@@ -128,7 +128,7 @@ retraining or knowledge distillation to repair the severed representation pathwa
 In this report, we investigated the impact of unstructured and structured pruning on the Qwen 3.5-4B model. Our findings highlight a stark contrast between theoretical capacity reduction and structural disruption. Wanda's unstructured approach preserves both general knowledge and logical reasoning remarkably well, proving to be a safe zero-shot compression technique. Conversely, structured methods like ShortGPT and Width Pruning result in severe zero-shot degradation, particularly on reasoning tasks, emphasizing that physical architectural modifications require subsequent retraining or distillation to be viable.
 
 \begin{thebibliography}{9}
-\bibitem[Muralidharan et al.(2024)]{muralidharan2024compact} Muralidharan, S., et al. (2024). Compact Language Models via Pruning and Knowledge Distillation. \textit{arXiv:2408.11796}.
+\bibitem[Muralidharan et al.(2024)]{muralidharan2024compact} Muralidharan, S., et al. (2024). Compact Language Models via Pruning and Knowledge Distillation. \textit{arXiv:2407.14679}.
 \bibitem[Sun et al.(2023)]{sun2023wanda} Sun, M., et al. (2023). A Simple and Effective Pruning Approach for Large Language Models. \textit{arXiv:2306.11695}.
 \bibitem[Men et al.(2024)]{men2024shortgpt} Men, X., et al. (2024). ShortGPT: Layers in Large Language Models are More Redundant Than You Expect. \textit{arXiv:2403.03853}.
 \end{thebibliography}
