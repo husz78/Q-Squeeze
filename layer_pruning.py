@@ -5,9 +5,9 @@ from torch import nn
 from collections import defaultdict
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# import sys
+# import os
+# sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils import (
     load_model_and_tokenizer,
@@ -20,13 +20,13 @@ from utils import (
 )
 
 # Configurable Pruning Ratios
-MODEL_ID = "Qwen/Qwen3.5-0.8B"
+MODEL_ID = "Qwen/Qwen3.5-4B"
 OUTPUT_DIR = "models/qwen-width-pruned"
 ATTN_HEAD_PRUNE_RATIO = 0.25   # Prune 25% of attention heads (leaves 6 out of 8 heads)
 MLP_PRUNE_RATIO = 0.20         # Prune 20% of MLP intermediate dimension (leaves 2864 out of 3584)
 
-N_CALIBRATION_SAMPLES = 4      # Set to 128 for reliable pruning, or 4 for a quick smoke test
-SEQUENCE_LENGTH = 64           # Set to 2048 for full context, or 64 for a quick smoke test
+N_CALIBRATION_SAMPLES = 512      # Set to 128 for reliable pruning, or 4 for a quick smoke test
+SEQUENCE_LENGTH = 2048           # Set to 2048 for full context, or 64 for a quick smoke test
 RANDOM_SEED = 0
 BATCH_SIZE = 1
 TORCH_DTYPE = "auto"
@@ -34,7 +34,7 @@ DEVICE_MAP = "auto"
 TRUST_REMOTE_CODE = True       # Qwen3.5 text model needs trust_remote_code=True for hybrid layers
 
 # --- Benchmark Settings ---
-LIMIT = 5                      # Set to None for the full benchmark, or an integer (like 5) for a quick smoke test
+LIMIT = 100                      # Set to None for the full benchmark, or an integer (like 5) for a quick smoke test
 
 # --- Activation Stats Collector ---
 
@@ -316,12 +316,34 @@ def apply_width_pruning(model, samples):
 # --- Main Entry Point ---
 
 def main():
+    import argparse
+    from datetime import datetime
+
+    parser = argparse.ArgumentParser(description="Prune a Hugging Face Causal LM.")
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=None,
+        help="Directory to save the pruned model. If not specified, a timestamped directory will be used."
+    )
+    args = parser.parse_args()
+
+    if args.output_dir:
+        output_dir = args.output_dir
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        output_dir = f"{OUTPUT_DIR}-{timestamp}"
+
     model, tokenizer = load_model_and_tokenizer(
         MODEL_ID,
         torch_dtype=TORCH_DTYPE,
         device_map=DEVICE_MAP,
         trust_remote_code=TRUST_REMOTE_CODE,
     )
+    
+    # Calculate base model parameters
+    base_params = sum(p.numel() for p in model.parameters())
+    print(f"\nBase model parameter count: {base_params:,} ({base_params / 1e6:.2f}M)")
     
     # Run a pre-pruning test generation
     print("\nPre-pruning test generation:")
@@ -342,6 +364,12 @@ def main():
     # Prune
     apply_width_pruning(model, samples)
     
+    # Calculate pruned model parameters
+    pruned_params = sum(p.numel() for p in model.parameters())
+    print(f"Pruned model parameter count: {pruned_params:,} ({pruned_params / 1e6:.2f}M)")
+    reduction_pct = (base_params - pruned_params) / base_params * 100
+    print(f"Parameter reduction: {reduction_pct:.2f}% ({base_params - pruned_params:,} parameters removed)\n")
+    
     # Post-pruning test generation
     print("\nPost-pruning test generation:")
     with torch.no_grad():
@@ -349,93 +377,85 @@ def main():
     print(f"Generated: {tokenizer.decode(outputs[0], skip_special_tokens=True)}")
     
     # Save the pruned model and tokenizer
-    save_model_and_tokenizer(model, tokenizer, OUTPUT_DIR)
+    save_model_and_tokenizer(model, tokenizer, output_dir)
+    print("Saved the model in safetensors...")
 
     # Delete the model and tokenizer objects and free cache to prevent OOM
-    del model
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    # del model
+    # if torch.cuda.is_available():
+    #     torch.cuda.empty_cache()
 
-    # Run evaluation benchmark
-    try:
-        from lm_eval.evaluator import simple_evaluate
+    # # Run evaluation benchmark
+    # try:
+    #     from lm_eval.evaluator import simple_evaluate
         
-        # Check if multiple GPUs are available for parallelization
-        num_gpus = torch.cuda.device_count()
-        device_str = "cuda:0" if num_gpus == 1 else "cpu"
+    #     eval_device = "cuda:0" if torch.cuda.is_available() else "cpu"
         
-        # When using multiple GPUs, set device=None and pass parallel=True in model_args
-        base_args = f"pretrained={MODEL_ID},trust_remote_code={TRUST_REMOTE_CODE}"
-        pruned_args = f"pretrained={OUTPUT_DIR}"
+    #     base_args = f"pretrained={MODEL_ID},trust_remote_code={TRUST_REMOTE_CODE}"
+    #     pruned_args = f"pretrained={output_dir},trust_remote_code={TRUST_REMOTE_CODE}"
         
-        if num_gpus > 1:
-            print(f"Detected {num_gpus} GPUs. Running benchmark in parallel/sharded mode...")
-            base_args += ",parallel=True"
-            pruned_args += ",parallel=True"
-            eval_device = None
-        else:
-            eval_device = device_str
+    #     print(f"Running benchmark on device: {eval_device}...")
         
-        # 1. Benchmark the base model
-        print(f"\nStarting benchmark on the base model ({MODEL_ID})...")
-        base_results = simple_evaluate(
-            model="hf",
-            model_args=base_args,
-            tasks=["mmlu", "gsm8k"],
-            device=eval_device,
-            batch_size=1,
-            num_fewshot=5,
-            limit=LIMIT,
-        )
+    #     # 1. Benchmark the base model
+    #     print(f"\nStarting benchmark on the base model ({MODEL_ID})...")
+    #     base_results = simple_evaluate(
+    #         model="hf",
+    #         model_args=base_args,
+    #         tasks=["mmlu", "gsm8k"],
+    #         device=eval_device,
+    #         batch_size=1,
+    #         num_fewshot=5,
+    #         limit=LIMIT,
+    #     )
         
-        # 2. Benchmark the pruned model
-        print(f"\nStarting benchmark on the pruned model ({OUTPUT_DIR})...")
-        pruned_results = simple_evaluate(
-            model="hf",
-            model_args=pruned_args,
-            tasks=["mmlu", "gsm8k"],
-            device=eval_device,
-            batch_size=1,
-            num_fewshot=5,
-            limit=LIMIT,
-        )
+    #     # 2. Benchmark the pruned model
+    #     print(f"\nStarting benchmark on the pruned model ({output_dir})...")
+    #     pruned_results = simple_evaluate(
+    #         model="hf",
+    #         model_args=pruned_args,
+    #         tasks=["mmlu", "gsm8k"],
+    #         device=eval_device,
+    #         batch_size=1,
+    #         num_fewshot=5,
+    #         limit=LIMIT,
+    #     )
         
-        # 3. Print side-by-side comparison
-        print("\n=== Benchmark Comparison ===")
-        print(f"  {'Task':<22} | {'Base Model':<12} | {'Pruned Model':<12}")
-        print("-" * 55)
+    #     # 3. Print side-by-side comparison
+    #     print("\n=== Benchmark Comparison ===")
+    #     print(f"  {'Task':<22} | {'Base Model':<12} | {'Pruned Model':<12}")
+    #     print("-" * 55)
         
-        base_dict = base_results.get("results", {})
-        pruned_dict = pruned_results.get("results", {})
+    #     base_dict = base_results.get("results", {})
+    #     pruned_dict = pruned_results.get("results", {})
         
-        for task in ["mmlu", "gsm8k", "mmlu_stem", "mmlu_humanities", "mmlu_social_sciences", "mmlu_other"]:
-            if task in base_dict or task in pruned_dict:
-                # Get base score
-                base_score = None
-                if task in base_dict:
-                    for key, val in base_dict[task].items():
-                        if ("acc" in key or "exact_match" in key) and "stderr" not in key:
-                            base_score = val
-                            break
+    #     for task in ["mmlu", "gsm8k", "mmlu_stem", "mmlu_humanities", "mmlu_social_sciences", "mmlu_other"]:
+    #         if task in base_dict or task in pruned_dict:
+    #             # Get base score
+    #             base_score = None
+    #             if task in base_dict:
+    #                 for key, val in base_dict[task].items():
+    #                     if ("acc" in key or "exact_match" in key) and "stderr" not in key:
+    #                         base_score = val
+    #                         break
                 
-                # Get pruned score
-                pruned_score = None
-                if task in pruned_dict:
-                    for key, val in pruned_dict[task].items():
-                        if ("acc" in key or "exact_match" in key) and "stderr" not in key:
-                            pruned_score = val
-                            break
+    #             # Get pruned score
+    #             pruned_score = None
+    #             if task in pruned_dict:
+    #                 for key, val in pruned_dict[task].items():
+    #                     if ("acc" in key or "exact_match" in key) and "stderr" not in key:
+    #                         pruned_score = val
+    #                         break
                 
-                alias = base_dict.get(task, {}).get("alias", pruned_dict.get(task, {}).get("alias", task))
-                base_str = f"{base_score:.2%}" if base_score is not None else "N/A"
-                pruned_str = f"{pruned_score:.2%}" if pruned_score is not None else "N/A"
-                print(f"  {alias:<22} | {base_str:<12} | {pruned_str:<12}")
-        print("=============================")
+    #             alias = base_dict.get(task, {}).get("alias", pruned_dict.get(task, {}).get("alias", task))
+    #             base_str = f"{base_score:.2%}" if base_score is not None else "N/A"
+    #             pruned_str = f"{pruned_score:.2%}" if pruned_score is not None else "N/A"
+    #             print(f"  {alias:<22} | {base_str:<12} | {pruned_str:<12}")
+    #     print("=============================")
         
-    except ImportError:
-        print("\nlm-eval package not found. Skipping benchmark. Install it via 'pip install lm-eval'")
-    except Exception as e:
-        print(f"\nError running benchmark: {e}")
+    # except ImportError:
+    #     print("\nlm-eval package not found. Skipping benchmark. Install it via 'pip install lm-eval'")
+    # except Exception as e:
+    #     print(f"\nError running benchmark: {e}")
 
 
 if __name__ == "__main__":
