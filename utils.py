@@ -156,7 +156,7 @@ def load_hybrid_calibration(
         raise RuntimeError(f"Collected {len(c4_samples)} C4 samples, expected {n_c4}.")
 
     # 2. Load GSM8K dataset
-    gsm_dataset = load_dataset("gsm8k", "main", split="train")
+    gsm_dataset = load_dataset("openai/gsm8k", "main", split="train")
 
     gsm_samples = []
     attempts = 0

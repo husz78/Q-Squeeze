@@ -19,3 +19,4 @@ __pycache__/
 .python-version
 .venv
 models
+results
