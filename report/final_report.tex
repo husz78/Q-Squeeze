@@ -58,6 +58,8 @@ Layers that perform minimal transformations on the hidden states are deemed redu
 
 \textbf{3. Width Pruning (Structured Width Slicing)}: This method physically slices the weight matrices of Multi-Head Attention (MHA) query/key/value heads and MLP intermediate dimensions. By utilizing forward hooks to record L2 activation norms over a calibration dataset, we rank the most important heads and neurons. We align the pruning of attention heads to respect Grouped-Query Attention (GQA) divisibility constraints. The result is a physically smaller model that directly accelerates inference and reduces VRAM usage.
 
+In all experiments, pruning was restricted to the repeated decoder stack. The input token embedding matrix, final normalization layer, and final vocabulary projection (\texttt{lm\_head}) were kept intact. For Wanda, we zeroed individual weights in every \texttt{nn.Linear} module inside each decoder block, including both standard attention projections, Qwen 3.5 linear-attention projections, and MLP projections. For width pruning, we physically sliced standard self-attention query/key/value/output projections and MLP intermediate dimensions; Qwen 3.5 linear-attention modules were left unchanged. ShortGPT operates at a coarser granularity by removing selected decoder blocks while leaving the embedding and output layers unchanged.
+
 \section{Experimental Set-up}
 Our experiments were conducted on the \textbf{Entropy Cluster}, utilizing \textbf{NVIDIA Titan V} and \textbf{RTX 2080 Ti} GPUs. 
 
