@@ -1,5 +1,12 @@
 # Q-Squeeze
 
+> 
+> **Final Project Report & Benchmarks**
+> - **PDF Report**: [report/final_report.pdf](report/final_report.pdf)
+> - **LaTeX Source**: [report/final_report.tex](report/final_report.tex)
+> - **Block Influence Plot**: [plots/BI_plot.png](plots/BI_plot.png)
+> - **Quantitative Data**: [benchmark_results/NLP Group Project Benchmarks Results - Sheet1.csv](benchmark_results/NLP%20Group%20Project%20Benchmarks%20Results%20-%20Sheet1.csv)
+
 This repository contains pruning implementations for Qwen/Qwen3.5-style causal language models, supporting both unstructured and structured pruning techniques:
 
 1. **Wanda (Unstructured Pruning)**: Prunes individual weights in linear layers based on weight magnitudes and input activation norms:
@@ -12,7 +19,7 @@ This repository contains pruning implementations for Qwen/Qwen3.5-style causal l
 ## Repository Structure
 
 - `wanda.py`: Wanda-specific scoring, hooks, masks, and unstructured pruning logic.
-- `width_pruning/layer_pruning.py`: Structured width pruning logic, including activation collection, GQA alignment, and physical weight slicing.
+- `layer_pruning.py`: Structured width pruning logic, including activation collection, GQA alignment, and physical weight slicing.
 - `utils.py`: Shared utilities for model/tokenizer loading, C4 calibration data sampling, batching, and model saving.
 
 
@@ -24,11 +31,11 @@ Install Python dependencies:
 pip install -r requirements.txt
 ```
 
-The script downloads these through Hugging Face when first run:
+The script downloads these through Hugging Face / Datasets when first run:
 
-- the target model, for example your Qwen 3.5 8B checkpoint;
-- tokenizer files for that model;
-- C4 English calibration data from `allenai/c4`.
+- The target model (e.g., Qwen 3.5 4B or 0.8B);
+- Tokenizer files for that model;
+- C4 English calibration data from `allenai/c4` and GSM8K training data from `openai/gsm8k` (used to generate the hybrid calibration dataset).
 
 For gated/private models, log in first:
 
@@ -38,16 +45,17 @@ huggingface-cli login
 
 ## Calibration Data
 
-We follow the Wanda/SparseGPT setup: 128 calibration sequences sampled from the C4 training set.
-By default, `wanda.py` samples from the first C4 training shard:
+We use a **50/50 hybrid calibration dataset** consisting of general English text from the C4 dataset (`allenai/c4`) and mathematical questions from the GSM8K training set (`openai/gsm8k`).
 
+The calibration dataset is generated using `load_hybrid_calibration()` in `utils.py`, which cuts random spans from C4 and concatenates random GSM8K question-answer pairs to match the target sequence length (2048 tokens).
+
+- **For Wanda**: We use **128** calibration sequences.
+- **For Structured Width Pruning** (`layer_pruning.py`): We use **512** calibration sequences to collect robust activation statistics.
+
+By default, C4 samples are drawn from the first train shard:
 ```text
 allenai/c4: en/c4-train.00000-of-01024.json.gz
 ```
-
-Use the model context length you want to test. For a first local run, `2048` is cheaper; on the final
-cluster run, use the context length agreed for the report. If the first-shard download causes problems
-on the cluster, use `--calib-source streaming-c4` as a practical fallback and document the difference.
 
 ## Dry Run
 
@@ -74,14 +82,14 @@ After checking the printed layers, set:
 PRINT_ONLY = False
 ```
 
-For a local smoke test, keep:
+For a local smoke test, keep the default cheap settings:
 
 ```python
 MODEL_ID = "Qwen/Qwen3.5-0.8B"
-OUTPUT_DIR = "models/qwen-wanda-20"
+OUTPUT_DIR = "models/qwen-wanda-smoke"
 SPARSITY = 0.20
-N_CALIBRATION_SAMPLES = 128
-SEQUENCE_LENGTH = 2048
+N_CALIBRATION_SAMPLES = 4
+SEQUENCE_LENGTH = 64
 TORCH_DTYPE = "auto"
 DEVICE_MAP = "auto"
 ```
@@ -101,7 +109,7 @@ Start with perplexity or a small `lm-eval` task before full MMLU/GSM8K:
 
 ```bash
 lm_eval --model hf \
-  --model_args pretrained=models/qwen3.5-8b-wanda-20 \
+  --model_args pretrained=models/qwen-wanda-smoke \
   --tasks wikitext \
   --device cuda:0 \
   --batch_size auto
@@ -111,7 +119,7 @@ Then run the project tasks:
 
 ```bash
 lm_eval --model hf \
-  --model_args pretrained=models/qwen3.5-8b-wanda-20 \
+  --model_args pretrained=models/qwen-wanda-smoke \
   --tasks gsm8k,mmlu \
   --device cuda:0 \
   --batch_size auto
@@ -119,7 +127,7 @@ lm_eval --model hf \
 
 ## Structured Width Pruning
 
-In addition to Wanda, this repository supports structured width pruning of Multi-Head Attention query/key/value heads and MLP intermediate dimensions in `width_pruning/layer_pruning.py`.
+In addition to Wanda, this repository supports structured width pruning of Multi-Head Attention query/key/value heads and MLP intermediate dimensions in `layer_pruning.py`.
 
 Unlike unstructured pruning, structured width pruning physically slices the weight matrices, resulting in smaller files, reduced VRAM footprint, and faster inference on any standard CPU or GPU.
 
@@ -129,9 +137,8 @@ Unlike unstructured pruning, structured width pruning physically slices the weig
 3. **Physical Slicing**: Replaces the layer modules with physically smaller `nn.Linear` layers and updates the global Hugging Face configuration.
 
 ### How to Run:
-Configure `ATTN_HEAD_PRUNE_RATIO` (e.g. `0.25`) and `MLP_PRUNE_RATIO` (e.g. `0.20`) at the top of `width_pruning/layer_pruning.py`, then run:
+Configure `ATTN_HEAD_PRUNE_RATIO` (e.g. `0.25`) and `MLP_PRUNE_RATIO` (e.g. `0.20`) at the top of `layer_pruning.py`, then run:
 ```bash
-python width_pruning/layer_pruning.py
+python layer_pruning.py
 ```
 The pruned model will be saved in `models/qwen-width-pruned` and can be loaded out-of-the-box using `AutoModelForCausalLM.from_pretrained()`.
-
